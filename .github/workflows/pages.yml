@@ -1,0 +1,54 @@
+name: Build and Deploy Web Game
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build C++ physics to WebAssembly
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            emscripten/emsdk:3.1.74 \
+            em++ cpp/physics.cpp -O3 \
+              -s STANDALONE_WASM=1 \
+              -s EXPORTED_FUNCTIONS='["_physics_reset","_physics_state","_physics_step"]' \
+              --no-entry \
+              -o web/physics.wasm
+
+      - name: Upload GitHub Pages files
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
